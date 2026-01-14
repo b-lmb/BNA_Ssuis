@@ -1,0 +1,105 @@
+---
+title: "BNA_AMR patterns"
+author: "Ruwini Rupasinghe"
+date: "2026-01-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+```{r Packages}
+library(dplyr)
+library(ggplot2)
+```
+
+# Data upload
+```{r echo=FALSE}
+df_amds <- df_analyze %>%
+  select(-siteID)
+```
+
+# Count unique AMR patterns
+```{r}
+# Count unique AMR patterns (S/I/R treated separately)
+pattern_counts <- df_amds %>%
+  count(across(everything()), name = "Frequency") %>%
+  arrange(desc(Frequency))
+# Group rows by the all AMD columns, where each row with unique S/I/R combination across all AMDs is a full AMR pattern across all AMDs. Then count unique AMR patterns (rows) and sort the pattern by Frequency.
+
+pattern_counts
+
+# Number of unique patterns
+nrow(pattern_counts)
+
+
+
+# Count unique patterns and rank them. Rank number is the pattern ID
+pattern_ranked <- df_amds %>%
+  count(across(everything()), name = "Frequency") %>%
+  arrange(desc(Frequency)) %>%
+  mutate(RankID = row_number())
+# Add a Rank column and assign a rank number based on the row order. Rank 1 is the most frequent pattern.
+
+pattern_ranked
+
+# Number of unique patterns
+nrow(pattern_ranked)
+
+```
+
+# Convert the data frame to a long format
+```{r}
+# All AMD column labels are now stacked in a single column (AMD) and the S/I/R data of each AMD is in a 2nd column (Susceptibility)
+# Add a column for AMD classes.
+
+amr_long_bna <- pivot_longer(data = pattern_ranked, 
+                            cols = -c(14:15),
+                            names_to = "AMD", 
+                            values_to = "Susceptibility") %>%
+  mutate(AMD_class = case_when(
+    AMD %in% c("CEF", "PEN") ~ "Beta-lactam",
+    AMD %in% c("CHL", "OXY", "TET") ~ "Tetracycline",
+    AMD %in% c("GEN", "NEO", "SPC") ~ "Aminoglycoside",
+    AMD %in% c("SUL") ~ "Sulfonamide",
+    AMD %in% c("TIL") ~ "Macrolide",
+    AMD %in% c("CLN") ~ "Lincosamide",
+    AMD %in% c("TIA") ~ "Pleuromutilin",
+    AMD %in% c("ENR") ~ "Fluoroquinolone",
+    TRUE ~ "Other"  # Fallback for any genes not listed
+  ))
+
+amr_long_bna
+
+```
+
+
+# Heatmap for AMR patterns
+```{r}
+# Filter and prepare the data if there are additional columns
+heatmap_bna <- amr_long_bna %>%
+  select(RankID, AMD_class, AMD, Susceptibility) %>%
+  distinct()  # Get unique combinations
+
+
+# Create the heatmap
+heatmap_bna <- ggplot(heatmap_bna, aes(x = RankID, y = AMD, fill = Susceptibility)) +
+  geom_tile(color = "white") +
+  facet_grid(rows = vars(AMD_class), scales = "free_y", space = "free") +
+  theme(strip.text.y = element_text(angle = 0)) +
+# Specify the x-axis labels
+  # scale_x_discrete(breaks = c("1", "50", "100", "141")) +  # Use your actual label values
+  labs(x = "AMR Patterns",
+       y = "AMD") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1))  # Rotate x-axis labels for better readability
+
+ggsave(filename = "heatmap_bna.tif",
+  plot = heatmap_bna,
+  device = "tiff",
+  dpi = 300,
+  width = 6, height = 4, units = "in")
+```
+
+
